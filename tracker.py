@@ -3,6 +3,7 @@ import sys
 import speedtest
 import logging
 import time
+import datetime
 
 logging.basicConfig(
     filename=f"{time.strftime('%Y%m%d_%H%M%S')}.log",
@@ -27,11 +28,41 @@ logging.info("Application starting")
 
 frequency  = float(input("At what frequency do you want to do the speed test (in minutes)? > "))
 total_time = float(input("For how much time do you want to do the speed tests (in hours)? > "))
-times_tests_done = int(total_time*60 / frequency)
-logging.info(f"Program will run {times_tests_done} tests over {total_time} hours")
+tests_per_file = float(input("How many test entries do you want per file (more = more RAM usage, less = more files)? > "))
+number_of_tests = int(total_time * 60 / frequency)
+
+logging.info(f"Program will run {number_of_tests} tests over {total_time} hours")
+logging.info(f"Program will end at {datetime.datetime.now() + datetime.timedelta(hours=total_time)}")
+
+current_file = "test_results0.json"
+
+def load_data_into_file(test_id: int, download_speed: float, upload_speed: float,
+                        download_time_taken: float, upload_time_taken: float, time_of_test: str):
+    global  current_file
+
+    try:
+        with open(current_file, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {}
+
+    if len(data) >= tests_per_file:
+        current_file = f"test_results{test_id % tests_per_file}.json"
+        data = {}
+
+    data[str(test_id)] = {
+        "download_speed" : download_speed,
+        "upload_speed" : upload_speed,
+        "download_time_taken" : download_time_taken,
+        "upload_time_taken" : upload_time_taken,
+        "time_of_test" : time_of_test
+    }
+
+    with open(current_file, "w") as f:
+        json.dump(data, f, indent=2)
 
 
-def perform_speed_test():
+def perform_speed_test(test_id: int):
     st = speedtest.Speedtest()
 
     servers = []
@@ -57,6 +88,17 @@ def perform_speed_test():
     logging.info("Download Speed: {:.2f} Mbps".format(download_speed))
     logging.info("Upload Speed: {:.2f} Mbps".format(upload_speed))
 
+    load_data_into_file(test_id, download_speed, upload_speed, time_download, time_upload, str(datetime.datetime.now()))
+    
+    return time_upload + time_download
 
-perform_speed_test()
+
+for i in range(number_of_tests):
+    try:
+        time_taken = perform_speed_test(i)
+    except:
+        logging.exception("Something went wrong: ")
+        exit()
+    logging.info(f"Sleeping for {frequency * 60 - time_taken}")
+    time.sleep(frequency * 60 - time_taken)
 
